@@ -1,0 +1,5 @@
+{
+  "name": "ClimaRoute",
+  "description": "A Climate-Based Intelligent Delivery Optimization System featuring dynamic re-routing, adaptive speed recommendations, and safety alerts.",
+  "requestFramePermissions": []
+}
