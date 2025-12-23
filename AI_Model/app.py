@@ -196,5 +196,22 @@ def segment_weather():
     
     return jsonify({"segments": results})
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """ Health check endpoint """
+    return jsonify({"status": "ok", "message": "AI Server is running"})
+
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)
+    # Use Waitress for production-ready multi-threaded serving
+    # Waitress handles multiple concurrent requests properly on Windows
+    try:
+        from waitress import serve
+        print("🚀 Starting Production Server (Waitress)...")
+        print("📡 AI Model API running on http://127.0.0.1:5001")
+        print("👥 Multi-user support: ENABLED (4 threads)")
+        # threads=4 allows 4 concurrent requests, adjust as needed
+        serve(app, host='0.0.0.0', port=5001, threads=4)
+    except ImportError:
+        print("⚠️ Waitress not installed. Falling back to Flask dev server.")
+        print("⚠️ Run: pip install waitress")
+        app.run(port=5001, debug=True)

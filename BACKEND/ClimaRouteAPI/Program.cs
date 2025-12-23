@@ -16,64 +16,58 @@ builder.Services.AddHttpClient();
 var app = builder.Build();
 app.UseCors("AllowReact");
 
-// 2. DATABASE INIT - CLEAR ALL DATA AND RESEED
+// 2. DATABASE INIT - ENSURE PERSISTENCE
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     
-    // DELETE existing database and recreate fresh
-    db.Database.EnsureDeleted();
+    // Ensure database is created (but don't delete it if it exists)
     db.Database.EnsureCreated();
     
-    // Clear all tables (in case EnsureDeleted doesn't work on some systems)
-    db.Histories.RemoveRange(db.Histories);
-    db.SosAlerts.RemoveRange(db.SosAlerts);
-    db.Notifications.RemoveRange(db.Notifications);
-    db.Weathers.RemoveRange(db.Weathers);
-    db.UserSettings.RemoveRange(db.UserSettings);
-    db.Users.RemoveRange(db.Users);
-    db.SaveChanges();
-    
-    // Seed fresh users with new credentials
-    var adminPwd = "admin";
-    var driverPwd = "driver";
+    // Only seed if no users exist to ensure data persistence
+    if (!db.Users.Any())
+    {
+        // Seed fresh users with new credentials
+        var adminPwd = "admin";
+        var driverPwd = "driver";
 
-    var adminUser = new User { 
-        Email = "admin@gmail.com", 
-        Name = "Administrator", 
-        Phone = "+91-9876543210", 
-        Password = HashPassword(adminPwd), 
-        PlainPassword = adminPwd, 
-        Role = "admin", 
-        Status = "Active" 
-    };
-    
-    var driverUser = new User { 
-        Email = "driver@gmail.com", 
-        Name = "Driver", 
-        Phone = "+91-8765432109", 
-        Password = HashPassword(driverPwd), 
-        PlainPassword = driverPwd, 
-        Role = "user", 
-        Status = "Active" 
-    };
-    
-    db.Users.Add(adminUser);
-    db.Users.Add(driverUser);
-    db.SaveChanges();
-    
-    Console.WriteLine("===========================================");
-    Console.WriteLine("DATABASE CLEARED AND RESEEDED!");
-    Console.WriteLine("===========================================");
-    Console.WriteLine("Admin:  admin@gmail.com / admin");
-    Console.WriteLine("Driver: driver@gmail.com / driver");
-    Console.WriteLine("===========================================");
-
-    // Note: Delivery history data is created live when users start/complete deliveries.
-    // No dummy seed data for histories to ensure real-time accuracy.
-
-    // Note: SOS alerts are created live when drivers trigger them.
-    // No dummy seed data to ensure real-time accuracy.
+        var adminUser = new User { 
+            Email = "admin@gmail.com", 
+            Name = "Administrator", 
+            Phone = "+91-9876543210", 
+            Password = HashPassword(adminPwd), 
+            PlainPassword = adminPwd, 
+            Role = "admin", 
+            Status = "Active" 
+        };
+        
+        var driverUser = new User { 
+            Email = "driver@gmail.com", 
+            Name = "Driver", 
+            Phone = "+91-8765432109", 
+            Password = HashPassword(driverPwd), 
+            PlainPassword = driverPwd, 
+            Role = "user", 
+            Status = "Active" 
+        };
+        
+        db.Users.Add(adminUser);
+        db.Users.Add(driverUser);
+        db.SaveChanges();
+        
+        Console.WriteLine("===========================================");
+        Console.WriteLine("DATABASE INITIALIZED AND SEEDED!");
+        Console.WriteLine("===========================================");
+        Console.WriteLine("Admin:  admin@gmail.com / admin");
+        Console.WriteLine("Driver: driver@gmail.com / driver");
+        Console.WriteLine("===========================================");
+    }
+    else
+    {
+        Console.WriteLine("===========================================");
+        Console.WriteLine("DATABASE LOADED SUCCESSFULLY!");
+        Console.WriteLine("===========================================");
+    }
 }
 
 // 3. API ENDPOINTS
@@ -323,6 +317,11 @@ app.MapGet("/api/history", async (AppDbContext db) => {
 });
 app.MapPost("/api/history", async (AppDbContext db, SaveDeliveryHistoryRequest req) => { 
     try {
+        // Validate user exists before accepting request
+        if (string.IsNullOrEmpty(req.DriverEmail)) return Results.BadRequest("Driver email is required");
+        var userExists = await db.Users.AnyAsync(u => u.Email.ToLower() == req.DriverEmail.ToLower());
+        if (!userExists) return Results.Unauthorized();
+
         var trip = new DeliveryHistory {
             RouteId = req.RouteId,
             Date = req.Date,
@@ -477,13 +476,18 @@ app.MapGet("/api/admin/stats", async (AppDbContext db) => {
         // Active alerts = count of SOS alerts that are currently active (IsActive == true)
         var activeAlerts = await db.SosAlerts.CountAsync(a => a.IsActive);
 
-        var totalDrivers = users.Count(u => u.Role == "user");
+        // Count drivers (role = user, case-insensitive)
+        var totalDrivers = users.Count(u => !string.IsNullOrEmpty(u.Role) && u.Role.ToLower() == "user");
+        // Count all users in the system
+        var totalUsers = users.Count;
+    
         var systemHealth = (histories.Count > 0) ? "Good" : "No Data";
 
         return Results.Ok(new {
             activeFleet,
             activeAlerts,
             totalDrivers,
+            totalUsers,
             systemHealth,
             weeklyVolume = userDeliveries // Return user-based delivery counts instead of daily
         });
@@ -496,6 +500,7 @@ app.MapGet("/api/admin/stats", async (AppDbContext db) => {
             activeFleet = 0,
             activeAlerts = 0,
             totalDrivers = 0,
+            totalUsers = 0,
             systemHealth = "Error",
             weeklyVolume = new List<object>()
         });
@@ -535,6 +540,11 @@ app.MapGet("/api/alerts", async (AppDbContext db) => {
 });
 
 app.MapPost("/api/alerts", async (AppDbContext db, SosAlert req) => {
+    // Validate user exists before accepting request
+    if (string.IsNullOrEmpty(req.DriverEmail)) return Results.BadRequest("Driver email is required");
+    var userExists = await db.Users.AnyAsync(u => u.Email.ToLower() == req.DriverEmail.ToLower());
+    if (!userExists) return Results.Unauthorized();
+
     req.Time = DateTime.Now.ToString("HH:mm");
     req.IsActive = true;
     db.SosAlerts.Add(req);
@@ -679,6 +689,12 @@ app.MapPost("/api/fleet/update-location", async (AppDbContext db, UpdateLocation
         var trip = await db.Histories.FindAsync(req.TripId);
         if (trip == null) return Results.NotFound(new { error = "Trip not found" });
         
+        // Validate user associated with trip exists
+        if (!string.IsNullOrEmpty(trip.DriverEmail)) {
+            var userExists = await db.Users.AnyAsync(u => u.Email.ToLower() == trip.DriverEmail.ToLower());
+            if (!userExists) return Results.Unauthorized();
+        }
+        
         trip.CurrentLat = req.Latitude;
         trip.CurrentLon = req.Longitude;
         trip.Speed = req.Speed;
@@ -728,10 +744,17 @@ app.MapGet("/api/weather/history", async (AppDbContext db) => {
 // --- SOS TRACKING & BREAK MODE ---
 app.MapPost("/api/sos/track-movement", async (AppDbContext db, SosTrackingRequest req) => {
     // Log vehicle movement for idle detection
-    // In production, you'd save this to a separate tracking table
-    // For now, this can be used to update the last SOS alert's location
     try {
-        var lastAlert = await db.SosAlerts.OrderByDescending(s => s.Id).FirstOrDefaultAsync();
+        // Validate user exists
+        if (string.IsNullOrEmpty(req.DriverEmail)) return Results.BadRequest("Driver email is required");
+        var userExists = await db.Users.AnyAsync(u => u.Email.ToLower() == req.DriverEmail.ToLower());
+        if (!userExists) return Results.Unauthorized();
+
+        var lastAlert = await db.SosAlerts
+            .Where(s => s.DriverEmail.ToLower() == req.DriverEmail.ToLower())
+            .OrderByDescending(s => s.Id)
+            .FirstOrDefaultAsync();
+            
         if (lastAlert != null) {
             lastAlert.Location = req.Location;
             lastAlert.Time = req.Timestamp;
@@ -745,11 +768,15 @@ app.MapPost("/api/sos/track-movement", async (AppDbContext db, SosTrackingReques
 
 app.MapPut("/api/sos/update-status", async (AppDbContext db, SosStatusRequest req) => {
     // Update driver break mode and current location
-    // Create a notification record if break mode changes
     try {
+        // Validate user exists
+        if (string.IsNullOrEmpty(req.DriverEmail)) return Results.BadRequest("Driver email is required");
+        var userExists = await db.Users.AnyAsync(u => u.Email.ToLower() == req.DriverEmail.ToLower());
+        if (!userExists) return Results.Unauthorized();
+
         var alert = new SosAlert {
             VehicleId = "CURRENT-VEHICLE",
-            DriverEmail = "user@gami.com", // In real app, get from auth context
+            DriverEmail = req.DriverEmail,
             Type = req.BreakModeActive ? "BreakModeOn" : "BreakModeOff",
             Location = req.Location,
             Time = req.Timestamp,
@@ -944,8 +971,8 @@ public class SettingsRequest { public string? TemperatureUnit { get; set; } publ
 
 public class RouteRequest { public string Origin { get; set; } = ""; public string Destination { get; set; } = ""; }
 public class SaveWeatherRequest { public double Temperature { get; set; } public string Condition { get; set; } = ""; public int Humidity { get; set; } public double WindSpeed { get; set; } public double RainProbability { get; set; } public string SafetyScore { get; set; } = "Safe"; }
-public class SosTrackingRequest { public string Location { get; set; } = ""; public string Timestamp { get; set; } = ""; public bool IsMoving { get; set; } }
-public class SosStatusRequest { public bool BreakModeActive { get; set; } public string Location { get; set; } = ""; public string Timestamp { get; set; } = ""; }
+public class SosTrackingRequest { public string DriverEmail { get; set; } = ""; public string Location { get; set; } = ""; public string Timestamp { get; set; } = ""; public bool IsMoving { get; set; } }
+public class SosStatusRequest { public string DriverEmail { get; set; } = ""; public bool BreakModeActive { get; set; } public string Location { get; set; } = ""; public string Timestamp { get; set; } = ""; }
 public class RestPointRequest { public double Latitude { get; set; } public double Longitude { get; set; } }
 public class SaveDeliveryHistoryRequest { 
     public string RouteId { get; set; } = ""; 

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Input } from '../components/Layout';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import { Navigation, StopCircle, Crosshair, MapPin, MousePointerClick, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Navigation, StopCircle, Crosshair, MapPin, MousePointerClick, AlertTriangle, RefreshCw, Pause, Play, RotateCcw } from 'lucide-react';
 import { apiService } from '../services/apiservice';
 import { useSettings } from '../contexts/SettingsContext';
+import { useSos } from '../contexts/SosContext';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -65,6 +66,7 @@ function distanceKm(a: [number, number], b: [number, number]): number {
 // Mock GPS for testing (Chennai location)
 export function ReRouting() {
   // Restore from localStorage if available
+  const { breakModeActive, setBreakModeActive } = useSos();
   const [origin, setOrigin] = useState(() => localStorage.getItem('climaRoute_origin') || "Chennai, Tamil Nadu");
   const [dest, setDest] = useState(() => localStorage.getItem('climaRoute_dest') || "Bangalore, Karnataka");
   const [originAddress, setOriginAddress] = useState(() => localStorage.getItem('climaRoute_originAddress') || "Chennai, Tamil Nadu");
@@ -386,6 +388,20 @@ export function ReRouting() {
         return;
       }
 
+      // Update address strings from geocoded coordinates for accuracy
+      if (data.startCoords) {
+        const startAddr = await getReverseGeocode(data.startCoords.lat, data.startCoords.lon);
+        setOriginAddress(startAddr);
+        // If user typed a short name, update it to the full address
+        if (origin.length < startAddr.length) setOrigin(startAddr);
+      }
+      if (data.endCoords) {
+        const endAddr = await getReverseGeocode(data.endCoords.lat, data.endCoords.lon);
+        setDestAddress(endAddr);
+        // If user typed a short name, update it to the full address
+        if (dest.length < endAddr.length) setDest(endAddr);
+      }
+
       // Force Ghost Route if only 1 exists (Visual Aid)
       if (data.alternatives.length === 1) {
           const original = data.alternatives[0];
@@ -514,8 +530,8 @@ export function ReRouting() {
           sessionStorage.setItem('climaRoute_routeSegments', JSON.stringify({
             segments: segments,
             totalDistance: totalDistanceKm,
-            origin: originAddress || origin,
-            destination: destAddress || dest,
+            origin: origin,
+            destination: dest,
             routeGeometry: route.geometry,
             safetyScore: route.safetyScore,
             duration: route.duration
@@ -549,8 +565,8 @@ export function ReRouting() {
             date: (new Date()).toISOString().split('T')[0],
             startTime: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
             endTime: "",
-            origin: originAddress || origin,
-            destination: destAddress || dest,
+            origin: origin,
+            destination: dest,
             originLat: initialCoords[0],
             originLon: initialCoords[1],
             destinationLat: selectedRoute?.geometry?.slice(-1)[0]?.[0] || null,
@@ -642,6 +658,44 @@ export function ReRouting() {
       localStorage.removeItem('climaRoute_tripStartTime');
       localStorage.removeItem('climaRoute_timeLeft');
       localStorage.removeItem('climaRoute_navStartCoords');
+  };
+
+  const handleTogglePause = async () => {
+    const newMode = !breakModeActive;
+    setBreakModeActive(newMode);
+    
+    // Update backend status
+    try {
+      const tid = activeTripId || (parseInt(localStorage.getItem('climaRoute_tripId') || '0') || null);
+      if (tid) {
+        await apiService.updateHistory(tid, { 
+          status: newMode ? 'Paused' : 'InProgress' 
+        });
+      }
+    } catch (err) {
+      console.error("Failed to update pause status", err);
+    }
+  };
+
+  const handleResetNavigation = async () => {
+    if (!window.confirm("Are you sure you want to reset? This will cancel the current navigation.")) return;
+    
+    try {
+      const tid = activeTripId || (parseInt(localStorage.getItem('climaRoute_tripId') || '0') || null);
+      if (tid) {
+        await apiService.updateHistory(tid, { status: 'Cancelled' });
+      }
+    } catch (err) {
+      console.error("Failed to cancel trip", err);
+    }
+    
+    await stopNavigation();
+    
+    // Also clear route data to return to "Plan Your Journey" state
+    setRouteData(null);
+    setSelectedRouteIndex(null);
+    localStorage.removeItem('climaRoute_data');
+    localStorage.removeItem('climaRoute_selectedRoute');
   };
 
   // Complete trip, save to database, and clear everything
@@ -920,12 +974,28 @@ export function ReRouting() {
                 </div>
             ) : (
                 <div className="space-y-3">
-                        <div className="p-3 bg-green-50 rounded-lg text-center border border-green-200">
-                          <p className="text-green-800 font-bold text-xs uppercase mb-1">Live Tracking Active</p>
-                          <p className="text-[11px] text-green-700 mb-1">Auto-reroute active (Test: 10s)</p>
+                    <div className="p-3 bg-green-50 rounded-lg text-center border border-green-200">
+                        <p className="text-green-800 font-bold text-xs uppercase mb-1">Live Tracking Active</p>
+                        <p className="text-[11px] text-green-700 mb-1">Auto-reroute active (Test: 10s)</p>
                     </div>
-                  <Button className="w-full justify-center py-2 text-sm bg-emerald-600 hover:bg-emerald-700" onClick={completeAndSave}><Navigation className="mr-2" size={16}/> Complete & Save</Button>
-                  <Button className="w-full justify-center py-2 text-sm bg-red-600 hover:bg-red-700" onClick={stopNavigation}><StopCircle className="mr-2" size={16}/> Stop Navigation</Button>
+                    
+                    {/* 1. Complete & Save */}
+                    <Button className="w-full justify-center py-2 text-sm bg-emerald-600 hover:bg-emerald-700 shadow-md" onClick={completeAndSave}>
+                        <Navigation className="mr-2" size={16}/> Complete & Save
+                    </Button>
+                    
+                    {/* 2. Pause/Resume */}
+                    <Button 
+                        className={`w-full justify-center py-2 text-sm shadow-md ${breakModeActive ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'}`} 
+                        onClick={handleTogglePause}
+                    >
+                        {breakModeActive ? <><Play className="mr-2" size={16}/> Resume Navigation</> : <><Pause className="mr-2" size={16}/> Pause / Break</>}
+                    </Button>
+                    
+                    {/* 3. Reset */}
+                    <Button className="w-full justify-center py-2 text-sm bg-red-600 hover:bg-red-700 shadow-md" onClick={handleResetNavigation}>
+                        <RotateCcw className="mr-2" size={16}/> Reset Navigation
+                    </Button>
                 </div>
             )}
           </div>

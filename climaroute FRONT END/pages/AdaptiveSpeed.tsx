@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RotateCcw, Activity, Leaf, MapPin, TrendingUp, CloudRain, Sun, Wind, AlertTriangle, Navigation, Crosshair } from 'lucide-react';
+import { RotateCcw, Activity, MapPin, TrendingUp, CloudRain, Sun, Wind, AlertTriangle, Navigation, Crosshair } from 'lucide-react';
 import {
   AreaChart,
   Area,
@@ -42,15 +42,24 @@ export default function AdaptiveSpeed() {
    });
   
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null);
+  const [currentPlace, setCurrentPlace] = useState<string>("Acquiring...");
   const [currentSpeed, setCurrentSpeed] = useState<number>(0);
   const [traveledDistance, setTraveledDistance] = useState<number>(0);
   const [speedHistory, setSpeedHistory] = useState<Array<{ time: string; speed: number; distance: number }>>([]);
   const watchRef = useRef<number | null>(null);
   const prevPositionRef = useRef<[number, number] | null>(null);
 
-  // Fuel management
-  const [fuelConsumptionPer100Km] = useState<number>(8); // L/100km
-  const [co2PerLiter] = useState<number>(2.31); // kg CO2 per liter
+  // Helper: Get location name from coordinates
+  const getReverseGeocode = async (lat: number, lon: number): Promise<string> => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await response.json();
+      const addr = data.address;
+      return addr.city || addr.town || addr.village || addr.suburb || addr.county || addr.road || `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+    } catch (e) {
+      return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+    }
+  };
 
    // Helper for Weather Icons
    const getWeatherIcon = (condition: string) => {
@@ -202,31 +211,16 @@ export default function AdaptiveSpeed() {
        };
    }, [traveledDistance]);
 
-   // Calculate fuel and CO2 based on traveled distance
-   const fuelConsumed = (traveledDistance * (fuelConsumptionPer100Km / 100));
-   const co2Emitted = fuelConsumed * co2PerLiter;
-   
-   // Calculate eco score based on traveled distance vs recommended speeds
-   const calculateEcoScore = () => {
-       if (traveledDistance === 0 || speedHistory.length === 0) return 0;
-       
-       // Simple eco score: higher if speed is moderate and consistent
-       const avgSpeed = speedHistory.reduce((sum, entry) => sum + entry.speed, 0) / speedHistory.length;
-       const optimalSpeed = 70; // km/h
-       const speedVariance = speedHistory.reduce((sum, entry) => sum + Math.abs(entry.speed - avgSpeed), 0) / speedHistory.length;
-       
-       // Score based on closeness to optimal and consistency
-       const speedScore = Math.max(0, 100 - Math.abs(avgSpeed - optimalSpeed) * 2);
-       const consistencyScore = Math.max(0, 100 - speedVariance * 3);
-       
-       return Math.round((speedScore + consistencyScore) / 2);
-   };
-   
-   const ecoScore = calculateEcoScore();
-   
-   // Calculate CO2 saved (compared to aggressive driving - estimate 20% more fuel)
-   const aggressiveFuel = traveledDistance * (fuelConsumptionPer100Km * 1.2 / 100);
-   const co2Saved = Math.max(0, (aggressiveFuel - fuelConsumed) * co2PerLiter);
+   // Update place name when position changes
+   useEffect(() => {
+     if (userPosition) {
+       const updatePlace = async () => {
+         const name = await getReverseGeocode(userPosition[0], userPosition[1]);
+         setCurrentPlace(name);
+       };
+       updatePlace();
+     }
+   }, [userPosition]);
 
    if (loading) return (
        <div className="h-screen w-full flex items-center justify-center bg-slate-50">
@@ -326,58 +320,29 @@ export default function AdaptiveSpeed() {
                     </div>
                 </DashboardCard>
 
-                {/* 2. RIGHT: CURRENT SPEED & ECO */}
+                {/* 2. RIGHT: CURRENT SPEED */}
                 <div className="space-y-4 flex flex-col overflow-hidden">
                     <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg p-4 text-white relative overflow-hidden flex-1 flex flex-col justify-center">
                         <div className="z-10 text-center">
-                            <h3 className="text-blue-100 text-sm font-bold uppercase tracking-wider mb-2">Current Speed</h3>
-                            <div className="flex items-center justify-center gap-1">
-                                <span className="text-5xl font-black tracking-tighter">
+                            <h3 className="text-blue-100 text-sm font-bold uppercase tracking-wider mb-4">Current Speed</h3>
+                            <div className="flex items-center justify-center gap-2">
+                                <span className="text-7xl font-black tracking-tighter">
                                     {settings.distanceUnit === 'km' ? currentSpeed : Math.round(currentSpeed * 0.621371)}
                                 </span>
-                                <div className="flex flex-col items-start -mt-2">
-                                    <span className="text-xl font-bold">{settings.distanceUnit === 'km' ? 'KM' : 'MI'}</span>
-                                    <span className="text-sm opacity-60">/ H</span>
+                                <div className="flex flex-col items-start">
+                                    <span className="text-2xl font-bold">{settings.distanceUnit === 'km' ? 'KM' : 'MI'}</span>
+                                    <span className="text-lg opacity-60">/ H</span>
                                 </div>
                             </div>
-                            <div className="mt-2 text-xs text-blue-100">
-                                GPS Position: {userPosition ? `${userPosition[0].toFixed(4)}, ${userPosition[1].toFixed(4)}` : 'Acquiring...'}
+                            <div className="mt-6 p-3 bg-white/10 rounded-lg backdrop-blur-sm inline-block">
+                                <div className="text-xs text-blue-100 font-bold uppercase tracking-widest mb-1">Current Location</div>
+                                <div className="text-sm font-bold">
+                                    {currentPlace}
+                                </div>
                             </div>
                         </div>
-                        <RotateCcw className="absolute -right-3 -bottom-3 text-white/10" size={80} />
+                        <RotateCcw className="absolute -right-4 -bottom-4 text-white/10" size={120} />
                     </div>
-
-                    <DashboardCard className="p-4 flex-1 flex flex-col justify-center">
-                        <div className="flex justify-between items-start mb-2">
-                            <h3 className="text-slate-400 text-sm font-bold uppercase tracking-widest">Eco Score</h3>
-                            <Leaf size={16} className="text-green-500"/>
-                        </div>
-                        <div className="flex items-end gap-2 mb-2">
-                            <span className="text-4xl font-bold text-slate-800">{ecoScore}</span>
-                            <span className="text-base font-bold text-slate-400 mb-1">/100</span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-2">
-                            <div 
-                                className="bg-gradient-to-r from-green-500 to-emerald-500 h-full rounded-full transition-all" 
-                                style={{ width: `${ecoScore}%` }}
-                            ></div>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-xs text-slate-500 flex justify-between">
-                                <span>CO₂ Emitted:</span>
-                                <span className="font-bold text-orange-600">{co2Emitted.toFixed(2)} kg</span>
-                            </p>
-                            <p className="text-xs text-slate-500 flex justify-between">
-                                <span>CO₂ Saved:</span>
-                                <span className="font-bold text-green-600">{co2Saved.toFixed(2)} kg</span>
-                            </p>
-                            <p className="text-xs text-slate-500 flex justify-between">
-                                <span>Fuel Used:</span>
-                                <span className="font-bold text-blue-600">{fuelConsumed.toFixed(2)} L</span>
-                            </p>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-2 text-center italic">Based on actual travel</p>
-                    </DashboardCard>
                 </div>
 
                 {/* 3. BOTTOM: ACTUAL SPEED PROFILE GRAPH */}

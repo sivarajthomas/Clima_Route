@@ -5,6 +5,8 @@ import { CloudRain, AlertTriangle, Clock, Activity, Navigation, Crosshair } from
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { apiService } from '../services/apiservice'; // Ensure filename matches case
 import { useSettings, convertTemp } from '../contexts/SettingsContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useSos } from '../contexts/SosContext';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -33,6 +35,8 @@ function RecenterMap({ center }: { center: [number, number] }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const { user } = useAuth();
+  const { sosStatus, resolveActiveAlert } = useSos();
   
   // --- STATE MANAGEMENT ---
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -160,7 +164,7 @@ export default function Dashboard() {
     <>
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 mb-4">
         <h2 className="text-2xl font-bold text-slate-800">Dashboard</h2>
-        <p className="text-sm text-slate-500 mt-1">Welcome back, Driver.</p>
+        <p className="text-sm text-slate-500 mt-1">Welcome back, {user?.name || 'Driver'}.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
@@ -218,15 +222,34 @@ export default function Dashboard() {
           {/* SOS Status */}
           <Card 
             onClick={(e) => { e.stopPropagation(); navigate('/sos'); }} 
-            className="bg-red-50 border-l-4 border-red-500 cursor-pointer hover:bg-red-100 transition-colors"
+            className={`${sosStatus === 'Normal' ? 'bg-green-50 border-green-500 hover:bg-green-100' : 'bg-red-50 border-red-500 hover:bg-red-100'} border-l-4 cursor-pointer transition-colors relative group/sos`}
           >
              <div className="flex items-start gap-4">
-                <div className="bg-red-100 p-3 rounded-full text-red-600">
+                <div className={`${sosStatus === 'Normal' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} p-3 rounded-full`}>
                    <AlertTriangle size={24} />
                 </div>
-                <div>
-                   <h3 className="text-lg font-bold text-red-700">System Status: Normal</h3>
-                   <p className="text-red-600/80 text-sm mt-1">Tap here to report an emergency or SOS.</p>
+                <div className="flex-1">
+                   <div className="flex justify-between items-start">
+                      <h3 className={`text-lg font-bold ${sosStatus === 'Normal' ? 'text-green-700' : 'text-red-700'}`}>
+                        System Status: {sosStatus}
+                      </h3>
+                      {sosStatus === 'Abnormal' && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if(window.confirm("Are you sure you want to resolve this alert and return to Normal status?")) {
+                              resolveActiveAlert();
+                            }
+                          }}
+                          className="bg-white text-red-600 border border-red-200 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                        >
+                          Resolve Now
+                        </button>
+                      )}
+                   </div>
+                   <p className={`${sosStatus === 'Normal' ? 'text-green-600/80' : 'text-red-600/80'} text-sm mt-1`}>
+                     {sosStatus === 'Normal' ? 'Tap here to report an emergency or SOS.' : 'Emergency detected! Tap for details.'}
+                   </p>
                 </div>
              </div>
           </Card>

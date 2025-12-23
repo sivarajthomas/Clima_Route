@@ -40,7 +40,7 @@ export default function AdminDashboard() {
     { label: 'Active Fleet', value: stats.activeFleet, color: 'bg-blue-100 text-blue-600', icon: Map, path: '/admin/fleet' },
     { label: 'Active Alerts', value: stats.activeAlerts, color: 'bg-red-100 text-red-600', icon: AlertTriangle, path: '/admin/alerts' },
     { label: 'Total Drivers', value: stats.totalDrivers, color: 'bg-purple-100 text-purple-600', icon: Users, path: '/admin/users' },
-    { label: 'Manage Users', value: stats.totalDrivers + 1, color: 'bg-green-100 text-green-600', icon: Users, path: '/admin/users' },
+    { label: 'Manage Users', value: stats.totalUsers, color: 'bg-green-100 text-green-600', icon: Users, path: '/admin/users' },
   ];
 
   return (

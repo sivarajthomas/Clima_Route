@@ -5,11 +5,20 @@ import {
     Clock, Pause, Play, MapPin, Bell, RotateCcw
 } from 'lucide-react';
 import { apiService } from '../services/apiservice';
+import { useSos } from '../contexts/SosContext';
 
 export function SOS() {
+  const { 
+    sosStatus, 
+    idleTimeSeconds, 
+    breakModeActive, 
+    setBreakModeActive,
+    triggerSos: triggerGlobalSos,
+    resetIdleTimer,
+    resolveActiveAlert
+  } = useSos();
+
   const [isNavigating, setIsNavigating] = useState(false);
-  const [breakModeActive, setBreakModeActive] = useState(false);
-  const [idleTimeSeconds, setIdleTimeSeconds] = useState(0);
   const [lastGpsLocation, setLastGpsLocation] = useState<[number, number] | null>(null);
   const [currentGpsLocation, setCurrentGpsLocation] = useState<[number, number] | null>(null);
   const [currentLocationName, setCurrentLocationName] = useState<string>("GPS Inactive");
@@ -137,37 +146,9 @@ export function SOS() {
     }
   };
 
-  // Handle idle time tracking - only start when vehicle actually stops or navigation stopped
-  useEffect(() => {
-    // Only start counting if:
-    // 1. Navigation was stopped (user clicked Stop Navigation), OR
-    // 2. Vehicle has physically stopped (GPS shows no movement)
-    // AND break mode is not active
-    
-    const shouldCount = (navigationStopped || vehicleStopped) && !breakModeActive;
-    
-    if (!shouldCount) {
-      // Don't count - clear interval if exists
-      if (idleCheckIntervalRef.current) {
-        clearInterval(idleCheckIntervalRef.current);
-        idleCheckIntervalRef.current = null;
-      }
-      return;
-    }
-
-    // Start idle countdown
-    const idleInterval = setInterval(() => {
-      setIdleTimeSeconds((prev) => prev + 1);
-    }, 1000);
-    
-    idleCheckIntervalRef.current = idleInterval;
-    return () => clearInterval(idleInterval);
-  }, [navigationStopped, vehicleStopped, breakModeActive]);
-
   // Resume navigation - stop and reset timer
   const handleResume = () => {
-    setIdleTimeSeconds(0);
-    setIdleNotificationSent(false);
+    resolveActiveAlert();
     setVehicleStopped(false);
     setNavigationStopped(false);
     stoppedCountRef.current = 0;
@@ -220,6 +201,7 @@ export function SOS() {
         "Emergency"
       );
 
+      await triggerGlobalSos(type);
       setSosActive(true);
       setTimeout(() => setSosActive(false), 5000);
       alert("SOS Signal Sent! Help is on the way.");

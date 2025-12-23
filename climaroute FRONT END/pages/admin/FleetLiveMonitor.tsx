@@ -108,7 +108,10 @@ export default function FleetLiveMonitor() {
       const fleetData = await apiService.getFleetRealtime();
       
       if (fleetData && fleetData.length > 0) {
-        const formattedVehicles: Vehicle[] = fleetData.map((v: any) => ({
+        // Sort by ID descending and take only the latest active fleet
+        const latestFleet = [...fleetData].sort((a, b) => b.id - a.id).slice(0, 1);
+
+        const formattedVehicles: Vehicle[] = latestFleet.map((v: any) => ({
           id: v.id,
           driverName: v.driverName || v.driverEmail || 'Unknown Driver',
           driverEmail: v.driverEmail || '',
@@ -132,6 +135,11 @@ export default function FleetLiveMonitor() {
         setVehicles(formattedVehicles);
         setLastUpdate(new Date());
         
+        // Auto-select the latest vehicle if none selected
+        if (formattedVehicles.length > 0 && selectedVehicleIdRef.current === null) {
+          handleTruckClick(formattedVehicles[0]);
+        }
+        
         // Update selected vehicle using ref to avoid stale closure
         if (selectedVehicleIdRef.current !== null) {
           const updated = formattedVehicles.find(v => v.id === selectedVehicleIdRef.current);
@@ -145,15 +153,18 @@ export default function FleetLiveMonitor() {
         const history = await apiService.getHistory();
         const activeTrips = history.filter((trip: any) => {
           const status = (trip.status || '').toLowerCase();
-          return status !== 'completed' && status !== '';
+          return status !== 'completed' && status !== 'cancelled' && status !== '';
         });
+
+        // Sort by ID descending and take only the latest active fleet
+        const latestActive = activeTrips.sort((a: any, b: any) => b.id - a.id).slice(0, 1);
         
-        const formattedVehicles: Vehicle[] = activeTrips.map((trip: any) => ({
+        const formattedVehicles: Vehicle[] = latestActive.map((trip: any) => ({
           id: trip.id,
           driverName: trip.driverName || trip.userName || trip.driverEmail || 'Unknown Driver',
           driverEmail: trip.driverEmail || '',
           vehicleId: trip.routeId || `TRIP-${trip.id}`,
-          status: 'Moving',
+          status: trip.status || 'Moving',
           heading: 'En Route',
           lat: trip.currentLat || trip.originLat || 13.0827,
           lon: trip.currentLon || trip.originLon || 80.2707,
@@ -171,6 +182,11 @@ export default function FleetLiveMonitor() {
         
         setVehicles(formattedVehicles);
         setLastUpdate(new Date());
+
+        // Auto-select the latest vehicle if none selected
+        if (formattedVehicles.length > 0 && selectedVehicleIdRef.current === null) {
+          handleTruckClick(formattedVehicles[0]);
+        }
         
         // Update selected vehicle using ref
         if (selectedVehicleIdRef.current !== null) {
@@ -356,29 +372,6 @@ export default function FleetLiveMonitor() {
                   </React.Fragment>
                 )}
              </MapContainer>
-             
-             {/* Map Legend */}
-             <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg text-xs z-[1000]">
-               <p className="font-bold mb-2 text-gray-700">Legend</p>
-               <div className="space-y-1">
-                 <div className="flex items-center gap-2">
-                   <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                   <span>Vehicle Location</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                   <span>Origin Point</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                   <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                   <span>Destination</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                   <div className="w-6 h-1 bg-blue-500 rounded"></div>
-                   <span>Active Route</span>
-                 </div>
-               </div>
-             </div>
              
              {/* Prompt to select vehicle */}
              {!selectedVehicle && (

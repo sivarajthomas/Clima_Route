@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../../components/Layout';
-import { AlertTriangle, MapPin, Clock, User, Truck, CheckCircle } from 'lucide-react';
+import { AlertTriangle, MapPin, Clock, User, Truck, CheckCircle, HelpCircle } from 'lucide-react';
 import { apiService } from '../../services/apiservice';
 
 export default function EmergencyAlerts() {
@@ -129,13 +129,17 @@ export default function EmergencyAlerts() {
                   </div>
 
                   {/* Resolve Button */}
-                  {alert.isActive && (
+                  {alert.isActive ? (
                     <button
                       onClick={() => handleResolveAlert(alert.id)}
-                      className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-bold text-sm hover:bg-green-200 transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-yellow-100 text-yellow-700 border border-yellow-300 rounded-lg font-bold text-sm hover:bg-yellow-200 transition-colors flex items-center gap-2 shadow-sm"
                     >
-                      <CheckCircle size={16} /> Resolve
+                      <HelpCircle size={16} /> Resolve?
                     </button>
+                  ) : (
+                    <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-bold text-sm flex items-center gap-2">
+                      <CheckCircle size={16} /> Resolved
+                    </div>
                   )}
 
                 </div>

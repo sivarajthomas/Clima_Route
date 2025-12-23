@@ -104,3 +104,9 @@ dist/
 
 .vs/
 .vs/Clima_Route/v17/.suo
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+# Zip archives
+*.zip

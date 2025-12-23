@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { BackgroundProvider } from './contexts/BackgroundContext';
+import { SosProvider } from './contexts/SosContext';
 import Login from './pages/Auth';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
@@ -35,8 +36,9 @@ export default function App() {
     <AuthProvider>
       <SettingsProvider>
         <BackgroundProvider>
-          <HashRouter>
-            <Routes>
+          <SosProvider>
+            <HashRouter>
+              <Routes>
           {/* Public / Auth Routes */}
           <Route path="/" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -68,6 +70,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </HashRouter>
+          </SosProvider>
         </BackgroundProvider>
       </SettingsProvider>
     </AuthProvider>
