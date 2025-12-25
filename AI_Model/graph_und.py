@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # --- CONFIGURATION ---
-LOG_FILE = r"C:\Users\magas\Desktop\Weather _pred_DL\AI_Model\training_log.csv"
+LOG_FILE = r"C:\Users\nirad\Downloads\Clima_Route\AI_Model\training_log.csv"
 
 def plot_performance():
     print("Reading training logs...")

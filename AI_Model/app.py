@@ -6,7 +6,11 @@ import os
 import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from tensorflow.keras.models import load_model
+try:
+    from tensorflow.keras.models import load_model
+except Exception:
+    load_model = None
+    print("⚠️ TensorFlow not available; model loading is disabled.")
 from datetime import datetime
 
 app = Flask(__name__)
@@ -26,7 +30,7 @@ print("⏳ Loading AI Model...")
 model = None
 scaler = None
 
-if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
+if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH) and load_model is not None:
     try:
         model = load_model(MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
@@ -34,7 +38,10 @@ if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
     except Exception as e:
         print(f"❌ Error loading model: {e}")
 else:
-    print("⚠️ Model files not found. Ensure rainfall_model.keras and scaler.gz are in this folder.")
+    if not (os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH)):
+        print("⚠️ Model files not found. Ensure rainfall_model.keras and scaler.gz are in this folder.")
+    else:
+        print("⚠️ TensorFlow not installed; model loading skipped. Install TensorFlow to enable predictions.")
 
 # --- HELPER: Fetch Weather ---
 def get_real_weather(lat, lon):
