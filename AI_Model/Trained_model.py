@@ -9,7 +9,7 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import CSVLogger # <--- NEW TOOL
 
 # --- CONFIGURATION ---
-CSV_FILE_PATH = r'C:\Users\magas\Desktop\Weather _pred_DL\AI_Model\WeatherDataset.csv'
+CSV_FILE_PATH = r'C:\Users\nirad\Downloads\Clima_Route\AI_Model\WeatherDataset.csv'
 MODEL_SAVE_PATH = 'rainfall_model.keras'
 SCALER_SAVE_PATH = 'scaler.gz'
 LOG_FILE = 'training_log.csv' # <--- Where we save the history
